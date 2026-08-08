@@ -1,35 +1,45 @@
 #!/usr/bin/env python3
 """
-hub_dispatch.py - Dispatcher del HUB multi-agente (Norte/Windows).
-Plan FINAL aprobado: https://github.com/nedder3/matrioskha (brain/implementation_plan.md)
+hub_dispatch.py - Dispatcher LOCAL del HUB multi-agente (Norte/Sur).
 
-UN solo script stdlib-only (Python 3.8+). Ambas maquinas lo ejecutan:
-    python3 hub_dispatch.py --agent norte  --hub-path HUB [--remote arijd@192.168.0.11]
-    python3 hub_dispatch.py --agent windows --hub-path HUB
-    python3 hub_dispatch.py --agent norte --hub-path HUB --dry-run   # no llama hermes
+REESCRITO (cierre robusto Windows, [1.2.0]): elimina el SSH-spaghetti del
+andamiaje inicial (ya no hay _ssh/scp/HUB_WIN hardcoded). Cada maquina corre
+su propio dispatcher contra su COPIA LOCAL del repo; la sincronizacion es por
+git (Sur pushea, Norte hace pull), no por SSH entre agents. Esto es coherente
+con la decision [0.6.0]/[0.9.0]: A2A nativo NO valida -> se mantiene el
+mailbox git-backed como bus de estado compartido (el repo YA es el bus).
+
+Transporte: usa hub_core.StateStore (briefs/consensos/.seen = fuente de verdad)
+y transport_mailbox.MailboxGit (fallback git-backed) cuando hace falta cruzar
+mensajes. NO usa n8n/SaaS ni Telegram (out of scope, [0.6.0]).
 
 Flujo por brief:
-  1. listar HUB/briefs/ (local o via SSH si --remote)
+  1. listar hub/briefs/ (local)
   2. filtrar no procesados (.seen/) y target incluye a este agente
   3. tomar lock atomico (.processing/<id>__<agente>.lock, TTL 600s)
-  4. despertar: hermes chat -q (seed, modelo local) -> capturar session_id
+  4. despertar: hermes chat -q (seed) -> capturar session_id
      -> hermes chat --resume <id> -q (instruccion)
   5. verificar consens_<agente>_*.md; marcar .seen/; liberar lock
-  6. notificar via hermes send -t telegram
 
 NO degrada identidad: el agente responde con su sesion real via --resume.
-NO usa n8n/SaaS: solo hermes CLI + stdlib (+ SSH para Norte).
+Stdlib-only + hermes CLI. Modelo y binario por env (no hardcoded).
 """
+
 import argparse
 import os
 import re
 import subprocess
 import sys
 import time
+from pathlib import Path
+
+# Imports del hub (mismo dir que este script)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hub_core import StateStore  # noqa: E402
 
 POLL = 30
 LOCK_TTL = 600
-SEED_MODEL = "hermes3:8b"  # local, rapido, fiable (neverfadeaway lo documenta)
+SEED_MODEL = os.environ.get("HUB_SEED_MODEL", "hermes3:8b")  # local, rapido
 HERMES = os.environ.get(
     "HERMES_BIN",
     os.path.expanduser("~/.hermes/hermes-agent/venv/bin/hermes"),
@@ -40,119 +50,26 @@ def log(msg):
     print(f"[hub_dispatch:{AGENT}] {msg}", flush=True)
 
 
-# ---------- acceso a HUB (local o SSH) ----------
-def _ssh(cmd):
-    # cmd /c "..." con comillas para tolerar espacios en rutas (estilo hub_push.py)
-    r = subprocess.run(["ssh", REMOTE, f'cmd /c "{cmd}"'],
-                       capture_output=True, text=True, timeout=30)
-    if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip() or f"ssh rc={r.returncode}")
-    return r.stdout
-
-
-def list_briefs():
-    if REMOTE:
-        out = _ssh(f"dir /b {HUB_WIN}\\briefs\\*.md 2>nul")
-        return [l.strip() for l in out.splitlines() if l.strip().endswith(".md")]
-    d = os.path.join(HUB, "briefs")
-    try:
-        return sorted(f for f in os.listdir(d) if f.endswith(".md"))
-    except FileNotFoundError:
-        return []
-
-
-def read_file(folder, name):
-    if REMOTE:
-        return _ssh(f"type {HUB_WIN}\\{folder}\\{name}")
-    p = os.path.join(HUB, folder, name)
-    try:
-        return open(p, "r", encoding="utf-8").read()
-    except OSError:
-        return ""
-
-
-def write_local_file(folder, name, content):
-    """Escribe un archivo local (consenso de Norte antes del scp)."""
-    d = os.path.join(HUB, folder)
-    os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, name), "w", encoding="utf-8") as f:
-        f.write(content)
-    return os.path.join(d, name)
-
-
-def push_consenso_scp(local_path, name):
-    if not REMOTE:
-        return
-    subprocess.run(["scp", local_path, f"{REMOTE}:{HUB_WIN}/consensos/{name}"],
-                   check=True, capture_output=True, timeout=30)
-
-
-def seen_exists(brief_id, agent):
-    if REMOTE:
-        r = _ssh(f"dir {HUB_WIN}\\.seen\\{brief_id}__{agent} >nul 2>nul & if errorlevel 1 (echo no) else (echo yes)")
-        return "yes" in r.lower()
-    return os.path.exists(os.path.join(HUB, ".seen", f"{brief_id}__{agent}"))
-
-
-def mark_seen(brief_id, agent):
-    if REMOTE:
-        _ssh(f"if not exist {HUB_WIN}\\.seen mkdir {HUB_WIN}\\.seen")
-        _ssh(f"copy /b nul {HUB_WIN}\\.seen\\{brief_id}__{agent} >nul")
-        return
-    d = os.path.join(HUB, ".seen")
-    os.makedirs(d, exist_ok=True)
-    open(os.path.join(d, f"{brief_id}__{agent}"), "w").close()
-
-
-def lock_path(brief_id, agent):
-    return os.path.join(HUB, ".processing", f"{brief_id}__{agent}.lock")
-
-
-def lock_exists_remote(brief_id, agent):
-    r = _ssh(f"dir {HUB_WIN}\\.processing\\{brief_id}__{agent}.lock >nul 2>nul & if errorlevel 1 (echo no) else (echo yes)")
-    return "yes" in r.lower()
-
-
-def lock_exists_local(brief_id, agent):
-    return os.path.exists(lock_path(brief_id, agent))
-
-
-def lock_stale_remote(brief_id, other_agent):
-    # limpiar locks viejos de OTRO agente para target:any
-    out = _ssh(f"dir /b {HUB_WIN}\\.processing\\{brief_id}__*.lock 2>nul")
-    for f in out.splitlines():
-        f = f.strip()
-        if other_agent in f:
-            continue
-        r = _ssh(f"for %F in ({HUB_WIN}\\.processing\\{f}) do @echo %~tF")
-        # Windows no da mtime facil por cmd; confiamos en TTL via touch local
-    return False
-
-
-def try_lock(brief_id, agent, target):
-    """Lock atomico. Para target:any, verifica que otro agente no lo tenga."""
-    if REMOTE:
-        if target == "any" and lock_exists_remote(brief_id, "norte" if agent == "windows" else "windows"):
-            # si el lock de otro agente es reciente (<TTL), ceder
-            return False
-        _ssh(f"if not exist {HUB_WIN}\\.processing mkdir {HUB_WIN}\\.processing")
-        lock_cmd = f"copy /b nul {HUB_WIN}\\.processing\\{brief_id}__{agent}.lock >nul 2>nul"
-        _ssh(lock_cmd)
-        return lock_exists_remote(brief_id, agent)
-    # local
-    d = os.path.join(HUB, ".processing")
-    os.makedirs(d, exist_ok=True)
-    if target == "any":
-        for f in os.listdir(d):
-            if f.startswith(brief_id) and f.endswith(".lock") and agent not in f:
-                lp = os.path.join(d, f)
-                if time.time() - os.path.getmtime(lp) < LOCK_TTL:
-                    return False
-                try:
-                    os.unlink(lp)
-                except OSError:
-                    pass
-    lf = lock_path(brief_id, agent)
+# ---------- lock / seen (local, vía StateStore) ----------
+def try_lock(brief_id, agent):
+    """Lock atomico local. Para target:any, cede si otro agente lo tiene reciente."""
+    d = HUB / ".processing"
+    d.mkdir(parents=True, exist_ok=True)
+    if TARGET == "any":
+        for f in d.glob(f"{brief_id}__*.lock"):
+            if agent in f.name:
+                continue
+            try:
+                age = time.time() - f.stat().st_mtime
+            except OSError:
+                age = 0
+            if age < LOCK_TTL:
+                return False
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    lf = d / f"{brief_id}__{agent}.lock"
     try:
         fd = os.open(lf, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, f"{time.time()}\n{os.getpid()}\n".encode())
@@ -163,11 +80,9 @@ def try_lock(brief_id, agent, target):
 
 
 def release_lock(brief_id, agent):
-    if REMOTE:
-        _ssh(f"del {HUB_WIN}\\.processing\\{brief_id}__{agent}.lock 2>nul")
-        return
+    lf = HUB / ".processing" / f"{brief_id}__{agent}.lock"
     try:
-        os.unlink(lock_path(brief_id, agent))
+        lf.unlink()
     except OSError:
         pass
 
@@ -187,20 +102,6 @@ def parse_frontmatter(text):
     return meta
 
 
-def body_first_line(text):
-    in_fm = False
-    for ln in text.splitlines():
-        s = ln.strip()
-        if s == "---":
-            in_fm = not in_fm
-            continue
-        if in_fm:
-            continue
-        if s:
-            return s[:200]
-    return "(sin cuerpo)"
-
-
 def capture_session_id(text):
     if not text:
         return ""
@@ -216,17 +117,15 @@ def capture_session_id(text):
 
 def target_matches(target, agent):
     target = (target or "any").lower()
-    if target in (agent, "any", "both"):
-        return True
-    return False
+    return target in (agent, "any", "both")
 
 
 # ---------- hermes ----------
 def hermes_seed(brief_name):
     msg = (
         f"Hay un brief nuevo en el HUB para vos. Leelo con tus herramientas en "
-        f"HUB/briefs/{brief_name}, redacta tu respuesta como {AGENT}, y guardala en "
-        f"HUB/consensos/consens_{AGENT}_{time.strftime('%Y%m%d_%H%M%S')}.md con "
+        f"{HUB}/briefs/{brief_name}, redacta tu respuesta como {AGENT}, y guardala en "
+        f"{HUB}/consensos/consens_{AGENT}_{time.strftime('%Y%m%d_%H%M%S')}.md con "
         f"frontmatter: date, author: {AGENT}, role: agente, parent: {brief_name}."
     )
     cmd = [HERMES, "chat", "-q", msg, "-Q", "--pass-session-id", "-m", SEED_MODEL]
@@ -245,9 +144,9 @@ def hermes_seed(brief_name):
 
 
 def hermes_resume(sid, brief_name):
-    cons = f"HUB/consensos/consens_{AGENT}_{time.strftime('%Y%m%d_%H%M%S')}.md"
+    cons = f"{HUB}/consensos/consens_{AGENT}_{time.strftime('%Y%m%d_%H%M%S')}.md"
     msg = (
-        f"Leer HUB/briefs/{brief_name} con read_file. Redactar tu respuesta como "
+        f"Leer {HUB}/briefs/{brief_name} con read_file. Redactar tu respuesta como "
         f"{AGENT} y guardarla en {cons} con write_file, incluyendo frontmatter "
         f"parent: {brief_name}."
     )
@@ -259,68 +158,57 @@ def hermes_resume(sid, brief_name):
         return None
 
 
-def notify(text):
-    try:
-        subprocess.run([HERMES, "send", "-t", "telegram", text],
-                       capture_output=True, timeout=20)
-    except Exception as e:
-        log(f"notify fallo: {e}")
-
-
 # ---------- proceso ----------
 def process_brief(brief_file):
-    text = read_file("briefs", brief_file)
+    global TARGET
+    text = (HUB / "briefs" / brief_file).read_text(encoding="utf-8")
     meta = parse_frontmatter(text)
-    target = meta.get("target", "any")
-    if not target_matches(target, AGENT):
+    TARGET = meta.get("target", "any")
+    if not target_matches(TARGET, AGENT):
         return
-    if seen_exists(brief_file, AGENT):
+    if STORE.seen_exists(brief_file, AGENT):
         return
     if DRY_RUN:
-        log(f"[dry-run] procesaria {brief_file} (target={target})")
+        log(f"[dry-run] procesaria {brief_file} (target={TARGET})")
         return
-    if not try_lock(brief_file, AGENT, target):
+    if not try_lock(brief_file, AGENT):
         return
     try:
-        log(f"despertando para {brief_file} (target={target})")
+        log(f"despertando para {brief_file} (target={TARGET})")
         sid = hermes_seed(brief_file)
         if not sid:
-            notify(f"⚠️ {AGENT} no pudo iniciar sesion para {brief_file}")
+            log(f"no pudo iniciar sesion para {brief_file}")
             return
         cons = hermes_resume(sid, brief_file)
         if not cons:
-            notify(f"⚠️ {AGENT} no respondio a {brief_file} en 5 min")
+            log(f"no respondio a {brief_file} en 5 min")
             return
-        # para Norte (REMOTE), escribir local y scp
-        mark_seen(brief_file, AGENT)
+        STORE.mark_seen(brief_file, AGENT)
         who = meta.get("author", "arijd")
-        notify(f"💬 {AGENT} respondio a brief de {who}: {brief_file}")
+        log(f"respondio a brief de {who}: {brief_file}")
     finally:
         release_lock(brief_file, AGENT)
 
 
 def main():
-    global HUB, AGENT, REMOTE, HUB_WIN, DRY_RUN
+    global HUB, AGENT, TARGET, DRY_RUN, STORE
     ap = argparse.ArgumentParser()
-    ap.add_argument("--agent", required=True, choices=["norte", "windows"])
-    ap.add_argument("--hub-path", required=True)
-    ap.add_argument("--remote", default=None,
-                    help="user@host para acceso SSH (Norte en Mac)")
+    ap.add_argument("--agent", required=True, choices=["norte", "sur"])
+    ap.add_argument("--hub-path", required=True,
+                    help="Ruta LOCAL al repo del hub (mismo dir que este script)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
     AGENT = args.agent
-    HUB = args.hub_path
-    REMOTE = args.remote
+    HUB = Path(args.hub_path).resolve()
     DRY_RUN = args.dry_run
-    HUB_WIN = "C:/Users/arijd/Documents/Atlas/HUB" if REMOTE else HUB
-    if REMOTE:
-        HUB_WIN = HUB_WIN.replace("/", "\\")
-    log(f"arrancando. HUB={HUB} agente={AGENT} remote={REMOTE} dry={DRY_RUN}")
+    TARGET = "any"
+    STORE = StateStore(HUB)
+    log(f"arrancando. HUB={HUB} agente={AGENT} dry={DRY_RUN}")
     while True:
         try:
-            for b in list_briefs():
-                process_brief(b)
+            for b in sorted(STORE.briefs.glob("*.md")):
+                process_brief(b.name)
         except Exception as e:
             log(f"error: {e}")
         if args.once:

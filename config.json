@@ -1,5 +1,5 @@
 {
-  "hub_path": "C:\\Users\\arijd\\Documents\\Atlas\\HUB",
+  "hub_path": "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas",
   "participants": [
     {
       "id": "arijd",
@@ -10,7 +10,7 @@
       "online": true
     },
     {
-      "id": "Norte",
+      "id": "norte",
       "name": "Norte",
       "avatar": "N",
       "color": "#00cecb",
@@ -18,18 +18,10 @@
       "online": true
     },
     {
-      "id": "Windows",
-      "name": "[Windows]",
-      "avatar": "W",
+      "id": "sur",
+      "name": "Sur",
+      "avatar": "S",
       "color": "#ffed66",
-      "role": "sistema",
-      "online": true
-    },
-    {
-      "id": "Antigravity",
-      "name": "Antigravity",
-      "avatar": "AG",
-      "color": "#845ec2",
       "role": "agente",
       "online": true
     }
