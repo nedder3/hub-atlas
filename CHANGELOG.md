@@ -169,6 +169,30 @@ git log + los docs de Norte en `docs/norte/`.
   A2A en vivo (decisión de arquitectura) ANTES de la UI.
 - Comms por CHANGELOG + `consensos/`, NO Desktop. Sur = único pusher.
 
+## [0.6.0] 2026-08-09 — DECISIÓN (arijd): alcance de #3 + transporte A2A
+
+Acuerdo con arijd, registrado para retomar sin el chat:
+
+### #3 UI Tauri — alcance aclarado (es UX, NO requisito funcional)
+- El Hub **ya funciona hoy sin Tauri**: loop agente↔agente vive en archivos
+  (`HUB/briefs/` + `HUB/consensos/` + `hub_dispatch.py`). Tauri es solo la
+  vitrina visual para arijd (escribir briefs / leer consensos con colores).
+- **Windows-first**: terminar la app Tauri en PC (Windows) ahora.
+- **Port Mac**: DIFERIDO a una sesión futura cuando los 3 (arijd+Norte+Sur)
+  estemos juntos. No es bloqueante del loop.
+
+### Transporte A2A — es la próxima compuerta real
+- Los 3 YA estamos conectados vía hub de archivos (arijd briefs -> Norte/Sur
+  consensos por SSH). "Los 3 juntos" es estado actual, no contingentte a A2A.
+- A2A nativo, **si valida en vivo**, es el momento de **CENTRALIZAR** el
+  transporte en un mecanismo limpio (en vez de SSH-spaghetti + mailbox fallback)
+  y borrar `hub_dispatch.py`.
+- A2A es hipótesis a probar (Norte nunca lo validó en vivo): probar 1-2 intentos
+  (hermes serve/a2a Mac<->PC). Si no cruza tras 1-2 intentos -> plan de Gemini
+  (LangGraph/MQTT) como alternativa real.
+- Orden sugerido: (1) validar A2A en vivo, (2) si valida, migrar dispatch a
+  A2A+Hooks y centralizar, (3) luego Tauri Windows, (4) Tauri Mac diferido.
+
 ## Pendiente
 
 - Sur: rediseño Windows-first del Hub (estructura puede cambiar) + orquestador de modos.
