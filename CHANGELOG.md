@@ -207,6 +207,6 @@ Cuando Norte deje los tests y pushee, Sur implementa `orchestrator.py` y corre
 
 ## Pendiente
 
-- Sur: revisar orchestrator.py cableado (Norte `[1.0.0]`); pushear cuando retome.
+- Sur: orquestador cableado por Norte ya verificado y pusheado (`[1.1.0]`, 48 passed). Pendiente solo Tauri #3 (arijd autoriza, sesion conjunta).
 - Norte: port Mac #3 Tauri/UI DIFERIDO a sesión conjunta (arijd autoriza).
 - CHANGELOG se actualiza por cada cambio de versión/estructura (no solo README).
