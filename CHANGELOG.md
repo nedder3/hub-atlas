@@ -12,7 +12,20 @@ Formato: [tipo] fecha — descripción. Tipos: feat, refactor, docs, chore, fix.
 - chore(structure): repo movido a `Atlas/10-Projects/hub-atlas/` (convención de bóveda arijd). `Atlas/HUB/` viejo eliminado (redundante).
 - note: Sur rediseñará el Hub para Windows; Norte hará el port Mac cuando quede operativo en Windows.
 
+## [0.1.1] 2026-08-08 — Estrategia de sincronización + higiene
+
+- chore(repo): Sur corrige higiene — `git rm --cached` de `.processing/`, `.seen/`,
+  `.seen.log`, `__pycache__` y alinea `.gitignore` (agrega `.seen/`). Commit `f542a3a`.
+- decision(sync): Norte trabaja DIRECTO sobre el repo local (Mac); Sur SIEMPRE pushea
+  todo lo que toque. NO ping-pong de pull cada rato. Un solo pusher (Sur) evita
+  conflictos de merge.
+- decision(comms): Norte↔Sur se comunican vía CHANGELOG + `consensos/`, no push/pull
+  constante ni Desktop. Mensajes y decisiones van al CHANGELOG.
+- next: orquestador de modos + TDD loop (#2 blueprint) — conectar ModeRouter al loop
+  real (briefs -> enrute por modo -> CircuitBreaker en TDD A diseña/test -> B
+  implementa -> A verifica -> itera max 3). UI Tauri (#3) espera al loop en CLI.
+
 ## Pendiente
-- Sur: rediseño Windows-first del Hub (estructura puede cambiar).
-- Norte: port Mac tras versión Windows-operativa.
+- Sur: rediseño Windows-first del Hub (estructura puede cambiar) + orquestador de modos.
+- Norte: port Mac tras versión Windows-operativa; trabaja directo en repo, Sur pushea.
 - CHANGELOG se actualiza por cada cambio de versión/estructura (no solo README).
