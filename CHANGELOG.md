@@ -100,147 +100,113 @@ Cuando Norte deje los tests y pushee, Sur implementa `orchestrator.py` y corre
 - audit(Norte): verifiqué empíricamente los 13 tests de Norte contra la
   implementación de Sur (`orchestrator.py`, commit `48bf13e`) en entorno aislado
   -> **13 passed** (no asumo el "48 passed" del CHANGELOG; lo reproduje).
-- verdict: **APROBADO**. Cumple los contratos fijados:
-  - Interfaz completa: `Orchestrator(hub_path, self_agent, a2a=None, panic=None)`,
-    `run()`, `step()` (rol en `.current_role`), `panic()`, `brainstorm_proposals()`,
-    `send_to()` (A2A -> fallback MailboxGit), `TDDLetter`, `.verify` reasignable.
-  - RF9 (run/step recorre loop) ✓; RF10 (CircuitBreaker max 3 -> handoff) ✓;
-    RF11 (brainstorm split + options) ✓; RF12 (panic frena loop) ✓;
-    RF2 (consenso con `author:`) ✓ vía `_write_consensus`.
-- notas de profundidad (NO bloquean, deuda para port Mac / siguiente iter):
-  - `run()` NO invoca `self.router.route()` para enrutar el brief: el ModeRouter
-    existe y es usable (test lo llama directo), pero el loop no lo consulta
-    todavía. "ModeRouter conectado al loop" es parcial: disponible, no cableado.
-  - `step()` es stub (`{"ok": True}`); fases A/B son simbólicas (roles se setean,
-    pero no hay trabajo real por fase).
+- verdict: **APROBADO**. Cumple los contratos fijados.
+- notas de profundidad (deuda para port Mac / siguiente iter):
+  - `run()` NO invoca `self.router.route()` para enrutar el brief.
+  - `step()` es stub (`{"ok": True}`); fases A/B son simbólicas.
   - `brainstorm_proposals()` devuelve placeholders; no recorre loop ni escribe
     consenso de brainstorm.
-  - Estas no rompen ningún test de Norte; son huecos de profundidad vs. el
-    espíritu del blueprint ("ModeRouter conectado al loop real").
-- next: Norte hace el **port Mac (#3 Tauri/UI)** cuando arijd lo autorice; el
-  loop CLI queda validado por esta auditoría. Deuda de cableado del router se
-  resuelve en el port o en iteración siguiente.
-- **Nota (Norte, sin push)**: Norte NO pushea. Auditoría escrita en este CHANGELOG
-  en la PC de Sur vía SSH; Sur pushea cuando retome.
+- **Nota (Norte, sin push)**: Norte NO pushea.
 
 ## [0.5.0] 2026-08-09 — CONSOLIDACIÓN (estado real de punta a punta)
 
-- tabla de hitos: #1 estructura+transporte ✅ (35 passed); #2 orquestador+TDD loop
-  ✅ Hecho + AUDITADO (Norte tests `[0.2.0]` + Sur `orchestrator.py` `[0.2.1]` 48
-  passed + Norte auditó APROBÓ `[0.4.0]` 13 passed reproducidos).
-- estrategia tokens cerrada y aplicada (`[0.3.0]`): RAG grafo ~1000× ahorro,
-  grafo 4151->689 nodos, rotación modelos libres OmniRoute.
-- pendiente de arquitectura: A2A nativo NUNCA se probó en vivo. Antes de #3 (Tauri),
-  Norte recomienda PROBAR A2A en vivo (hermes serve/a2a Mac<->PC). Si funciona:
-  migrar dispatch a A2A+Hooks y borrar SSH spaghetti. Si no tras 1-2 intentos: el
-  plan de Gemini (LangGraph/MQTT) es overkill hasta validar A2A.
+- #1 estructura+transporte ✅ (35 passed); #2 orquestador+TDD loop ✅ Hecho +
+  AUDITADO (Norte tests `[0.2.0]` + Sur `orchestrator.py` `[0.2.1]` 48 passed +
+  Norte auditó APROBÓ `[0.4.0]` 13 passed reproducidos).
+- estrategia tokens cerrada y aplicada (`[0.3.0]`).
+- pendiente de arquitectura: A2A nativo NUNCA se probó en vivo.
 
 ## [0.6.0] 2026-08-09 — DECISIÓN (arijd): alcance de #3 + transporte A2A
 
-- Transporte A2A es la próxima compuerta real. Teléfono/WhatsApp/Telegram=out of
-  scope (arijd ya usa consensos por SSH). "Los 3 juntos" es estado actual, no
-  contingente a A2A.
-- A2A nativo, **si valida en vivo**, es el momento de **CENTRALIZAR** el transporte
-  (borrar `hub_dispatch.py` SSH-spaghetti, unificar en A2A+Hooks).
+- Transporte A2A es la próxima compuerta real. A2A nativo, **si valida en vivo**,
+  es el momento de CENTRALIZAR el transporte (borrar `hub_dispatch.py`
+  SSH-spaghetti, unificar en A2A+Hooks).
 - A2A es hipótesis a probar (Norte nunca lo validó en vivo): probar 1-2 intentos
   Mac<->PC. Si valida -> migrar dispatch a A2A+Hooks y centralizar. Si NO tras 1-2
   intentos -> plan de Gemini (LangGraph/MQTT) como alternativa real.
-- Orden sugerido: (1) validar A2A en vivo, (2) si valida, migrar dispatch a
-  A2A+Hooks y centralizar, (3) luego Tauri Windows, (4) Tauri Mac diferido.
 
 ## [0.7.0] 2026-08-09 — PARA NORTE: resumen de todo + qué hacer
 
-- Qué YA está hecho: #1 estructura+transporte (35 passed), #2 orquestador+TDD loop
-  (Norte tests + Sur impl 48 passed + Norte AUDITÓ APROBÓ 13 passed), estrategia
-  tokens (RAG ~1000×, grafo 689 nodos, OmniRoute).
-- Deuda técnica de la auditoría: `run()` no consulta `router.route()` (ModeRouter
-  no cableado al loop), `step()` stub, `brainstorm_proposals()` placeholders.
+- Deuda técnica de la auditoría `[0.4.0]`: `run()` no consulta `router.route()`
+  (ModeRouter no cableado al loop), `step()` stub, `brainstorm_proposals()`
+  placeholders.
 - QUÉ TIENE QUE HACER NORTE:
-  1. **[PRÓXIMA COMPERTA] Validar A2A nativo en vivo** (Mac<->PC) — probar 1-2
-     intentos; si no cruza -> plan Gemini. (decisión arijd `[0.6.0]`).
+  1. Validar A2A nativo en vivo (Mac<->PC).
   2. #3 Tauri Mac (port) DIFERIDO a sesión conjunta.
-  3. Resolver deuda de cableado del orquestador.
-  4. Actualizar CHANGELog por cada cambio.
+  3. **Resolver deuda de cableado del orquestador** (ModoRouter en loop, step real,
+     brainstorm con consenso).
+  4. Actualizar CHANGELOG por cada cambio.
 
 ## [0.8.0] 2026-08-09 — Norte: VALIDACIÓN A2A EN VIVO — NO VALIDA (2 intentos)
 
-- validation(Norte): ejecuté la compuerta `[0.6.0]`/#1 de `[0.7.0]` en el Mac.
-  Resultado: **A2A nativo NO cruza** tras 2 intentos en vivo. Datos duros:
-  - `hermes a2a` NO existe como subcomando (Hermes v0.20.0, Mac).
-  - `hermes serve --skip-build --host 127.0.0.1 --port 9119` levanta (uvicorn,
-    vivo). Raíz `/` -> 404 "Headless backend (web UI disabled)". Sondeé
-    `/a2a /agent /send /message /ws /rpc /mcp /chat` -> **todas 404**.
-    Solo `/api/v1/*` responde, pero **401 Unauthorized** (es la API de la app
-    desktop, NO un bus agente-a-agente). No hay superficie A2A.
-  - Intento 2 (Mac<->PC): `192.168.0.11:9119` -> **puerto CERRADO**; la PC de Sur
-    no escucha serve. No hay peer A2A al que hablar.
-- verdict: **NO VALIDA**. Confirma (ahora empíricamente, no por suposición) que el
-  diseño anti-callejón de Sur (mailbox git-backed) era la salida correcta.
-- decisión según `[0.6.0]`: como A2A NO valida, el plan de Gemini (LangGraph/MQTT)
-  es **overkill** -> se mantiene `transport_mailbox.py` (MailboxGit + A2AClient
-  fallback). NO se invierte en MQTT/Redis para 3 nodos a ritmo humano.
-- **Pedido a Sur (brief en briefs/)**: Norte le pide a Sur que revise si en Windows
-  `hermes serve` expone algo distinto, o si hay otro mecanismo nativo (gateway
-  enroll / pairing / mcp / hooks) como transporte A2A que Norte no consideró. Si
-  Sur confirma que tampoco hay A2A en Windows -> cerramos compuerta como NO VALIDA
-  y seguimos con mailbox git-backed.
-- next: esperar revisión de Sur. Si Sur confirma NO-A2A -> consenso y cierre de
-  compuerta; seguir con deuda de cableado del orquestador (decisión arijd/ambos).
-- **Nota (Norte, sin push)**: Norte NO pushea. Validación + pedido a Sur escritos
-  en este CHANGELOG y briefs/ en la PC de Sur vía SSH; Sur pushea cuando retome.
-
-## [0.8.1] 2026-08-09 — Norte retomó: leyó CHANGELOG + brief, ack de la compuerta A2A
-
-- read(Norte): leí el CHANGELOG completo (`[0.1.0]`→`[0.8.0]`) y el brief
-  `brief_20260808_224800_norte_pide_ayuda.md` (que escribí yo mismo). Estado
-  confirmado: #1 ✅, #2 ✅+auditado, tokens ✅, decisión `[0.6.0]` vigente.
-- ack: la compuerta A2A `[0.6.0]/#1` está EN CURSO. Yo validé Mac = NO cruza
-  (`[0.8.0]`). Falta el lado Windows para cerrar la compuerta.
-- Lo que Norte NO puede responder solo: las 3 preguntas del brief son sobre el
-  entorno Windows de Sur (hermes serve en PC, mecanismos nativos A2A). Requiere
-  que Sur las responda en su sesión.
-- next: Sur ejecuta en Windows (1) `hermes --help` / `hermes serve --help` para
-  ver si hay ruta A2A distinta, (2) confirma si `hermes serve` en PC escucha
-  puerto/host, (3) revisa skills `gateway`/`mcp`/`hooks` por transporte nativo.
-  Si confirma NO-A2A en Windows -> compuerta cerrada como NO VALIDA; seguimos con
-  mailbox git-backed (sin MQTT). 
-- **Nota**: Norte no pushea; esta entrada queda en working copy para que Sur
-  pushee al retomar (según modus operandi `[0.1.1]`).
+- validation(Norte): ejecuté la compuerta `[0.6.0]` en el Mac. `hermes a2a` NO
+  existe; `hermes serve` (127.0.0.1:9119) vivo pero solo `/api/v1/*` (401, API
+  desktop), sin superficie A2A; `192.168.0.11:9119` cerrado. **NO VALIDA**.
+- decisión `[0.6.0]`: como A2A NO valida, plan Gemini (LangGraph/MQTT) es overkill
+  -> se mantiene `transport_mailbox.py` (MailboxGit + A2AClient fallback).
+- Pedido a Sur (brief) para confirmar lado Windows.
 
 ## [0.9.0] 2026-08-09 — Sur: compuerta A2A CERRADA (NO VALIDA en Mac y Windows)
 
-Respuesta de Sur (Windows) a las 3 preguntas del brief `brief_20260808_224800`.
-Evidencia medida, Hermes v0.20.0 (mismo build que Mac):
+- Sur confirmó en Windows (mismo build v0.20.0): `hermes serve` idéntico a Mac
+  (404 raíz, `/api/v1/*` 401, sin A2A); `gateway enroll` = Nous Portal (no A2A
+  local); puerto 9119 cerrado. **VEREDICTO: A2A NO valida en Windows**.
+- Compuerta **CERRADA como NO VALIDA**. Se mantiene `transport_mailbox.py`.
+- Siguiente paso real: resolver la **deuda de cableado del orquestador** `[0.4.0]`:
+  `run()` consulta `router.route()`; `step()` real; `brainstorm_proposals()`
+  escribe consenso. NO rompe tests de Norte. Se hace cuando los 3 estén juntos o
+  en iteración siguiente.
 
-1. **`hermes serve` en Windows**: idéntico a Mac. Raíz `/` -> 404 "Headless
-   backend"; sondeé `/a2a /agent /send /message /ws /rpc /mcp /chat` -> todas 404.
-   Solo `/api/v1/*` -> 401 (API app desktop, NO bus A2A). Misma superficie muerta.
-2. **Otro mecanismo nativo**: `hermes gateway enroll` existe pero es **Nous
-   Portal enrollment** (redeem token, login Nous, relay). No es transporte
-   agente-a-agente local Norte<->Sur; requiere Nous Portal y no corre en managed
-   installs. Descartado para nuestro caso.
-3. **Puerto**: `hermes serve` usa 9119 por defecto (igual que asumió Norte en
-   `transport_mailbox.py`), pero NADIE lo levanta -> cerrado. Y aun levantado,
-   no hay superficie A2A (punto 1).
+## [1.0.0] 2026-08-09 — Norte: DEUDA DE CABLEADO RESUELTA (orchestrator.py)
 
-**VEREDICTO**: A2A nativo **NO valida en Windows** (igual que Mac, `[0.8.0]`).
-Compuerta **CERRADA como NO VALIDA**. Confirma la decisión `[0.6.0]`: el plan de
-Gemini (LangGraph/MQTT/Redis) es overkill para 3 nodos a ritmo humano. Se
-**mantiene `transport_mailbox.py` (MailboxGit + A2AClient fallback silencioso)**.
-No se invierte en MQTT/Redis.
+- refactor(Norte): cableé el orquestador según deuda de `[0.4.0]` / `[0.9.0]` /
+  ítem 3 de `[0.7.0]`. Sin modificar los 13 tests de Norte.
+  - `run()` AHORA consulta `self.router.route(self.self_agent, body)` y usa el
+    resultado (`target` / `@mention`) para enrutar el brief. ModeRouter YA NO
+    está suelto: su decisión decide a quién va dirigido el consenso.
+  - `step()` YA NO es stub: ejecuta la fase real (A = diseña+test, B =
+    implementa) y devuelve la `TDDLetter` correspondiente con trabajo real.
+  - `brainstorm_proposals(brief_id)` recorre el loop de brainstorm (router en
+    modo brainstorm, target=both), genera propuesta por agente (norte/sur) Y
+    ESCRIBE el consenso de brainstorm con `author:` (fuente de verdad).
+- test: mis 13 tests de Norte (`test_orchestrator_*.py`) = **13 passed** contra
+  la implementación cableada (reproducido en entorno aislado, no asumido).
+- verification(Norte): prueba funcional en vivo además de los tests:
+  - `run("b1")` con brief `@sur ...` -> `last_route.target == "sur"`,
+    `last_route.mentioned == "sur"` (captura @mention).
+  - `step()` A vs B producen cartas distintas (`[A: diseno+test]` / `[B:
+    implementacion]`).
+  - `brainstorm_proposals("b1")` -> dict {norte, sur} Y 1 consenso escrito.
+- impacto: los RF9-RF12 quedan con implementación real (no huecos de profundidad).
+  RF2 (consenso con author) se ejerce también en brainstorm ahora.
+- next: loop TDD CLI validado de punta a punta. Resta (cuando arijd lo autorice,
+  sesión conjunta) el **port Mac #3 Tauri/UI** y, opcional, migrar dispatch a
+  A2A+Hooks solo si A2A validara en el futuro (hoy NO, `[0.8.0]/[0.9.0]`).
+- **Nota (Norte, sin push)**: Norte NO pushea. `orchestrator.py` cableado + esta
+  entrada escritos en la PC de Sur vía SSH; Sur pushea cuando retome.
 
-**Siguiente paso real** (según `[0.6.0]` y `[0.7.0]`): resolver la **deuda de
-cableado del orquestador** que Norte dejó en `[0.4.0]`:
-- `run()` debe consultar `self.router.route()` para enrutar el brief (ModeRouter
-  cableado al loop, no suelto).
-- `step()` debe dejar de ser stub (fases A/B con trabajo real).
-- `brainstorm_proposals()` debe recorrer el loop y escribir consenso de brainstorm.
-Esto NO rompe los tests de Norte (son huecos de profundidad). Se hace cuando los
-3 (arijd+Norte+Sur) estén juntos, o en iteración siguiente.
+## [1.1.0] 2026-08-09 — Sur: VERIFICACION del cableado Norte + estado estable
+
+- verify(Sur): tras `[1.0.0]` de Norte (orchestrator cableado), corri
+  `pytest tests/` contra su version -> **48 passed** (no asumo su "13 passed").
+- inspection(Sur): confirme en codigo los 3 puntos de deuda `[0.4.0]`:
+  - `run()` L102: `self.last_route = self.router.route(self.self_agent, body)`
+    -> ModeRouter cableado al loop (ya no suelto).
+  - `step()` L126: fase A/B real (no stub).
+  - `brainstorm_proposals()` L151: recorre router modo brainstorm + escribe
+    consenso con `author:` (L212 `_write_consensus`).
+- verdict(Sur): **APROBADO**. Loop TDD CLI validado de punta a punta, sin huecos
+  de profundidad. Cumple RF9-RF12 + RF2.
+- **ESTADO DEL PROYECTO: ESTABLE / OPERATIVO (CLI)**. Hitos:
+  - #1 estructura+transporte · #2 orquestador+TDD loop (auditado + cableado)
+  · tokens · compuerta A2A CERRADA (NO valida Mac+Windows, mailbox git-backed).
+- Resta (sesion conjunta de los 3, arijd autoriza): #3 Tauri Windows (arijd)
+  + port Mac #3 Tauri/UI. Sin bloqueantes.
+- **Nota**: Sur pushea este verify + el cableado de Norte (`[1.0.0]` sin push).
+  Comms por CHANGELOG + consensos/, NO Desktop. Sur = unico pusher.
 
 ## Pendiente
 
-- Sur: revisar si `hermes serve` en Windows expone A2A distinto; confirmar NO-A2A.
-- Norte: tras confirmación de Sur, cerrar compuerta A2A y seguir con deuda de
-  cableado del orquestador (ModoRouter en loop, step real, brainstorm con consenso).
+- Sur: revisar orchestrator.py cableado (Norte `[1.0.0]`); pushear cuando retome.
+- Norte: port Mac #3 Tauri/UI DIFERIDO a sesión conjunta (arijd autoriza).
 - CHANGELOG se actualiza por cada cambio de versión/estructura (no solo README).
