@@ -34,23 +34,33 @@ HUB_WIN = "C:/Users/arijd/Documents/Atlas/HUB"  # placeholder; Sur define real
 # =====================================================================
 
 class MockA2AClient:
-    """Contrato: un cliente A2A que envia un mensaje a un peer y recibe respuesta.
-    Sur debe implementar esta interfaz real. El mock simula el transporte."""
+    """Contrato: cliente A2A que envia mensaje a un peer.
 
-    def __init__(self, local="norte", peer_url="http://192.168.0.11:9900"):
+    Alineado a la implementacion REAL de Sur (transport_mailbox.A2AClient):
+    si no cruza, cae SILENCIOSAMENTE a mailbox (no lanza). Refleja la
+    decision de diseno aprobada por Norte en su auditoria 2026-08-08.
+    """
+
+    def __init__(self, local="norte", peer_url="http://192.168.0.11:9900",
+                 mailbox=None):
         self.local = local
         self.peer_url = peer_url
+        self.mailbox = mailbox
         self.sent = []
         self.responses = []
         self._fail_next = False
 
     def send(self, peer, message, context_id=None):
-        """Envia mensaje a peer. Debe cruzar la LAN sin SSH manual.
-        Retorna response o lanza A2AError si no cruza."""
+        """Envia mensaje a peer. Si no cruza, fallback silencioso a mailbox."""
         self.sent.append((peer, message, context_id))
         if self._fail_next:
             self._fail_next = False
-            raise A2AError("transporte no cruza (mock)")
+            if self.mailbox is not None:
+                self.mailbox.push(f"{self.local}->{peer}: {message}")
+                ack = f"ACK(mailbox):{message}"
+                self.responses.append(ack)
+                return ack
+            raise A2AError("transporte no cruza (mock, sin mailbox)")
         resp = f"ACK:{message}"
         self.responses.append(resp)
         return resp
