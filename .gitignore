@@ -1,5 +1,6 @@
 # Atlas HUB — git ignores
-# Solo se versiona HUB/ (no el vault Atlas completo).
+# El repo raíz YA es el HUB (no subcarpeta). Solo se versiona código + docs +
+# estado fuente de verdad (briefs/consensos con frontmatter). No runtime locks.
 
 # Mac metadata
 ._*
@@ -15,8 +16,9 @@ __pycache__/
 graphify-out/
 .obsidian/
 
-# Hub runtime state (no versionar locks/mail en vivo)
+# Hub runtime state (no versionar locks/seen en vivo; briefs/consensos SÍ)
 .processing/
+.seen/
 .seen.log
 mail/
 
