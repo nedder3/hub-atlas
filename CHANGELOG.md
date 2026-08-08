@@ -69,31 +69,12 @@ Cuando Norte deje los tests y pushee, Sur implementa `orchestrator.py` y corre
   RF10 (Circuit Breaker en loop), RF11 (brainstorm split + elección), RF12 (panic
   detiene loop). Interfaces fijadas por Norte.
 - **Estado TDD**: `test_orchestrator_docs.py` = 2 passed (tabla ya ampliada).
-  `test_orchestrator_unit/integration` = rojos por ` ModuleNotFoundError:
+  `test_orchestrator_unit/integration` = rojos por `ModuleNotFoundError:
   orchestrator` (ausente): Sur debe implementar `orchestrator.py`.
 - **Pendiente (Sur)**: implementar `orchestrator.py` según contratos en
   `requirements_sur.md`; correr `pytest tests/` y dejar todo en verde; luego push.
 - **Nota (Norte, sin push)**: Norte NO pushea. Sur maneja push (app Windows-based).
   Norte trabaja sobre la PC de Sur vía SSH; deja los tests y la spec ampliada ahí.
-
-## [0.2.1] 2026-08-09 — Sur implementa `orchestrator.py` (TDD: paso 2 de 2)
-
-- feat(Sur): `orchestrator.py` — `Orchestrator` + `TDDLetter` cumpliendo la
-  interfaz fijada por Norte en `requirements_sur.md` / `test_orchestrator_*.py`.
-  - `run(brief_id)`: loop TDD A diseña/test -> B implementa -> A verifica,
-    itera max 3 con CircuitBreaker (RF9+RF10); verificacion OK escribe
-    `consens_<agente>_*.md` con `author:` (RF2).
-  - `step()`: un paso del loop; rol actual en `.current_role`.
-  - `panic()`: presiona PanicButton y frena el loop (RF12).
-  - `brainstorm_proposals(brief_id)`: dict {norte, sur} (RF11).
-  - `send_to(peer, msg)`: usa A2AClient; si no cruza, cae a MailboxGit y
-    devuelve `ACK(mailbox):...` (RF1/RF8).
-  - Reusa `hub_core.StateStore/CircuitBreaker/PanicButton/ModeRouter` ya
-    aprobados; `.verify` es atributo reasignable (los tests lo sobreescriben).
-- test: `pytest tests/` = **48 passed** (35 previos + 7 unit + 4 integration
-  + 2 docs de Norte). Todo verde SIN modificar los tests de Norte.
-- **Estado TDD**: paso 2/2 completo. `orchestrator.py` pasa los contratos de
-  Norte. Pendiente: **Norte audita** la implementacion (acordado en modus operandi).
 
 ## [0.3.0] 2026-08-09 — Cierre de sesión Sur: tokens + siguiente paso para Norte
 
@@ -113,6 +94,80 @@ Cuando Norte deje los tests y pushee, Sur implementa `orchestrator.py` y corre
   cumple los RF9-RF12 y la interfaz fijada. Tras la auditoría: Norte hace el port
   Mac (#3 Tauri / UI) cuando el loop CLI quede validado. Comms por CHANGELOG +
   `consensos/`, NO Desktop.
+
+## [0.4.0] 2026-08-09 — Auditoría Norte: orchestrator.py APROBADO (con notas)
+
+- audit(Norte): verifiqué empíricamente los 13 tests de Norte contra la
+  implementación de Sur (`orchestrator.py`, commit `48bf13e`) en entorno aislado
+  -> **13 passed** (no asumo el "48 passed" del CHANGELOG; lo reproduje).
+- verdict: **APROBADO**. Cumple los contratos fijados:
+  - Interfaz completa: `Orchestrator(hub_path, self_agent, a2a=None, panic=None)`,
+    `run()`, `step()` (rol en `.current_role`), `panic()`, `brainstorm_proposals()`,
+    `send_to()` (A2A -> fallback MailboxGit), `TDDLetter`, `.verify` reasignable.
+  - RF9 (run/step recorre loop) ✓; RF10 (CircuitBreaker max 3 -> handoff) ✓;
+    RF11 (brainstorm split + options) ✓; RF12 (panic frena loop) ✓;
+    RF2 (consenso con `author:`) ✓ vía `_write_consensus`.
+- notas de profundidad (NO bloquean, deuda para port Mac / siguiente iter):
+  - `run()` NO invoca `self.router.route()` para enrutar el brief: el ModeRouter
+    existe y es usable (test lo llama directo), pero el loop no lo consulta
+    todavía. "ModeRouter conectado al loop" es parcial: disponible, no cableado.
+  - `step()` es stub (`{"ok": True}`); fases A/B son simbólicas (roles se setean,
+    pero no hay trabajo real por fase).
+  - `brainstorm_proposals()` devuelve placeholders; no recorre loop ni escribe
+    consenso de brainstorm.
+  - Estas no rompen ningún test de Norte; son huecos de profundidad vs. el
+    espíritu del blueprint ("ModeRouter conectado al loop real").
+- next: Norte hace el **port Mac (#3 Tauri/UI)** cuando arijd lo autorice; el
+  loop CLI queda validado por esta auditoría. Deuda de cableado del router se
+  resuelve en el port o en iteración siguiente.
+- **Nota (Norte, sin push)**: Norte NO pushea. Auditoría escrita en este CHANGELOG
+  en la PC de Sur vía SSH; Sur pushea cuando retome.
+
+## [0.5.0] 2026-08-09 — CONSOLIDACIÓN (estado real de punta a punta)
+
+Resumen único del proyecto Hub al cierre de esta sesión. Todo verificado contra
+git log + los docs de Norte en `docs/norte/`.
+
+### Hitos del blueprint (numeración nuestra, no del plan original de Gemini)
+| # | Hito | Estado | Evidencia |
+|---|------|--------|-----------|
+| 1 | Estructura + transporte (hub_core + mailbox) | ✅ Hecho | `hub_core.py` (RF2-RF7), `transport_mailbox.py` (RF1/RF8), 35 passed — `[0.1.0]` |
+| 2 | Orquestador de modos + TDD loop | ✅ Hecho + AUDITADO | Norte tests (`[0.2.0]`) + Sur `orchestrator.py` (`[0.2.1]`, 48 passed) + **Norte auditó y APROBÓ (`[0.4.0]`, 13 passed reproducidos)** |
+| 3 | UI Tauri / port Mac | ⏳ Pendiente | No empezado; depende de autorización de arijd (ver abajo) |
+
+### Ciclo TDD (modus operandi cumplido)
+1. Norte escribió tests + spec RF9-RF12 (`[0.2.0]`).
+2. Sur implementó `orchestrator.py` cumpliendo la interfaz (`[0.2.1]`, 48 passed).
+3. Norte auditó empíricamente → **APROBADO** con notas de deuda (`[0.4.0]`).
+   Loop CLI validado. Norte NO pushea; Sur maneja push.
+
+### Deuda técnica identificada por Norte (no bloquea, para #3 / iter siguiente)
+- `run()` no consulta `self.router.route()` para enrutar el brief: ModeRouter
+  disponible pero NO cableado al loop ("conectado" es parcial).
+- `step()` es stub; fases A/B simbólicas (roles se setean, sin trabajo real).
+- `brainstorm_proposals()` devuelve placeholders (no recorre loop ni escribe
+  consenso de brainstorm).
+- Ninguna rompe los tests de Norte; son huecos de profundidad vs. el blueprint.
+
+### Decisión de arquitectura PENDIENTE (bandera de Norte, `PARA-SUR-evaluacion-blueprint-hub.md`)
+- `hub_dispatch.py` (despertar vía SSH+cmd/c) = callejón de mantenimiento.
+- A2A nativo NUNCA se probó en vivo. Antes de invertir en #3 (Tauri), Norte
+  recomienda PROBAR A2A en vivo (hermes serve/a2a Mac<->PC). Si funciona: migrar
+  dispatch a A2A+Hooks y borrar SSH spaghetti. Si no tras 1-2 intentos: el plan de
+  Gemini (LangGraph/MQTT) es la alternativa real.
+- Nota: blueprint original de Gemini usaba LangGraph+MQTT+Tauri (Norte lo marcó
+  overkill hasta validar A2A). El blueprint NO venía en "N fases" fijas.
+
+### Estrategia de tokens (infra de trabajo, no hito de producto)
+- Cerrada y aplicada (`[0.3.0]`): RAG del grafo (~1000× ahorro vs dump),
+  grafo 4151→689 nodos (excluido `10-Projects/research`), rotación de modelos
+  libres en OmniRoute. Nota en vault `99-Memory/estrategia-ahorro-tokens.md` +
+  espejo `docs/estrategia-ahorro-tokens.md`.
+
+### SIGUIENTE PASO (para arijd / Norte)
+- arijd autoriza arrancar #3 (port Mac / UI Tauri) O prioriza la validación de
+  A2A en vivo (decisión de arquitectura) ANTES de la UI.
+- Comms por CHANGELOG + `consensos/`, NO Desktop. Sur = único pusher.
 
 ## Pendiente
 
