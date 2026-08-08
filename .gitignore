@@ -1,0 +1,10 @@
+# Norte/Atlas HUB — ignores
+._*
+__pycache__/
+*.pyc
+*.pyo
+graphify-out/
+.obsidian/
+.seen.log
+.processing/
+.env
