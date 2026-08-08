@@ -193,6 +193,50 @@ Acuerdo con arijd, registrado para retomar sin el chat:
 - Orden sugerido: (1) validar A2A en vivo, (2) si valida, migrar dispatch a
   A2A+Hooks y centralizar, (3) luego Tauri Windows, (4) Tauri Mac diferido.
 
+## [0.7.0] 2026-08-09 — PARA NORTE: resumen de todo + qué hacer
+
+> Norte: esto es lo que leés al retomar. Sur (PC) deja el CHANGELOG al día; vos
+> trabajás directo en el repo, Sur pushea. NO uses Desktop para comms.
+
+### Qué YA está hecho (no lo repitas)
+1. **#1 Estructura + transporte** — `hub_core.py` (RF2-RF7),
+   `transport_mailbox.py` (RF1/RF8). 35 passed. (`[0.1.0]`)
+2. **#2 Orquestador + TDD loop** — TDD estricto:
+   - Norte escribió tests + spec RF9-RF12 (`[0.2.0]`).
+   - Sur implementó `orchestrator.py` (48 passed) (`[0.2.1]`).
+   - **Norte AUDITÓ y APROBÓ** (`[0.4.0]`, 13 passed reproducidos).
+3. **Estrategia tokens** — RAG del grafo (~1000× ahorro), grafo 4151→689 nodos,
+   rotación de modelos libres en OmniRoute. (`[0.3.0]` + `docs/estrategia-ahorro-tokens.md`)
+
+### Deuda técnica que DEJASTE en la auditoría (no bloquea, para resolver en #3 / iter)
+- `run()` NO consulta `self.router.route()` → ModeRouter disponible pero no
+  cableado al loop.
+- `step()` es stub; fases A/B simbólicas.
+- `brainstorm_proposals()` devuelve placeholders.
+
+### QUÉ TIENE QUE HACER NORTE (pendientes)
+1. **[PRÓXIMA COMPERTA] Validar A2A nativo en vivo** (Mac<->PC):
+   `hermes serve`/`a2a`, intercambiar 1 mensaje real. Si cruza → migrar
+   `hub_dispatch.py` a A2A+Hooks y borrar SSH-spaghetti (centralizar transporte).
+   Si NO cruza tras 1-2 intentos → plan de Gemini (LangGraph/MQTT) como
+   alternativa real. (Decisión arijd en `[0.6.0]`.)
+2. **#3 Tauri Mac (port)**: DIFERIDO hasta que los 3 (arijd+Norte+Sur) estén
+   juntos. Tauri Windows lo hace Sur; Mac lo hacés vos cuando arijd lo autorice.
+3. **Resolver la deuda de cableado** del orquestador (ModeRouter en el loop,
+   `step()` real, `brainstorm_proposals()` con consenso) — en el port Mac o
+   iteración siguiente, según criterio propio.
+4. **Actualizar CHANGELOG** por cada cambio de estructura/versión.
+
+### Orden sugerido (arijd)
+validar A2A en vivo → (si valida) migrar dispatch y centralizar → Tauri Windows
+(Sur) → Tauri Mac (Norte, diferido a sesión conjunta).
+
+### Dónde está todo
+- Repo: `10-Projects/hub-atlas/` (remote `hub-atlas.git`, master).
+- Docs de Norte: `docs/norte/` (evaluación blueprint, auditoría, PARA-SUR-*).
+- Vault (RAG): `99-Memory/hub-continuidad-sur.md`, `99-Memory/estrategia-ahorro-tokens.md`.
+- Sur = único pusher. Comms por CHANGELOG + `consensos/`.
+
 ## Pendiente
 
 - Sur: rediseño Windows-first del Hub (estructura puede cambiar) + orquestador de modos.
