@@ -95,6 +95,25 @@ Cuando Norte deje los tests y pushee, Sur implementa `orchestrator.py` y corre
 - **Estado TDD**: paso 2/2 completo. `orchestrator.py` pasa los contratos de
   Norte. Pendiente: **Norte audita** la implementacion (acordado en modus operandi).
 
+## [0.3.0] 2026-08-09 — Cierre de sesión Sur: tokens + siguiente paso para Norte
+
+- docs(Sur): estrategia de ahorro de tokens (Obsidian + Graphify + OmniRoute)
+  documentada y aplicada. Resumen:
+  - RAG del grafo en vez de dump del vault: 21.493 `.md` (~4,25 M tokens) ->
+    `graphify query` entrega ~1.700-4.500 tokens (**ahorro ~1000×**).
+  - Higiene del grafo: `.graphifyignore` excluye `10-Projects/research` (repo
+    del Coro). Rebuild `--force` -> grafo de **4151 -> 689 nodos, 0 de research**.
+  - Rotación de modelos libres en OmniRoute (:20128): `oc/big-pickle` (grafo),
+    `oc/deepseek-v4-flash-free` (ctx 1M, sesiones largas), `auto/fast`/`auto/cheap`
+    (triage), `gemini/gemini-embedding-2` (embeddings).
+  - Nota completa en el vault: `99-Memory/estrategia-ahorro-tokens.md` (indexada
+    por graphify). Espejo en `docs/estrategia-ahorro-tokens.md` (este repo).
+- **SIGUIENTE PASO (para Norte)**: auditar `orchestrator.py` (TDD 2/2 ya
+  implementado y pusheado en `48bf13e`). Verificar que la implementación de Sur
+  cumple los RF9-RF12 y la interfaz fijada. Tras la auditoría: Norte hace el port
+  Mac (#3 Tauri / UI) cuando el loop CLI quede validado. Comms por CHANGELOG +
+  `consensos/`, NO Desktop.
+
 ## Pendiente
 
 - Sur: rediseño Windows-first del Hub (estructura puede cambiar) + orquestador de modos.
