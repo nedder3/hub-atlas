@@ -1,10 +1,25 @@
-# Norte/Atlas HUB — ignores
+# Atlas HUB — git ignores
+# Solo se versiona HUB/ (no el vault Atlas completo).
+
+# Mac metadata
 ._*
+.DS_Store
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+
+# Graphify / Obsidian
 graphify-out/
 .obsidian/
-.seen.log
+
+# Hub runtime state (no versionar locks/mail en vivo)
 .processing/
+.seen.log
+mail/
+
+# Secrets
 .env
+*.key
