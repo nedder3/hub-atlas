@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.atlas.hub-watcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/ajaime/Documents/Atlas/HUB/hub_watcher_mac.sh</string>
+    </array>
+    <key>StartInterval</key><integer>30</integer>
+    <key>RunAtLoad</key><true/>
+    <key>StandardOutPath</key><string>/tmp/hub-watcher.stdout.log</string>
+    <key>StandardErrorPath</key><string>/tmp/hub-watcher.stderr.log</string>
+</dict>
+</plist>
