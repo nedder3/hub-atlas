@@ -229,6 +229,12 @@ fn load_messages() -> Result<Vec<Message>, String> {
     // Sort by date (RFC3339 strings can be sorted lexicographically)
     messages.sort_by(|a, b| a.date.cmp(&b.date));
 
+    // Debug file write to verify what Tauri actually sees
+    if let Ok(serialized) = serde_json::to_string_pretty(&messages) {
+        let debug_file = hub_dir.join("debug_messages.json");
+        let _ = fs::write(debug_file, serialized);
+    }
+
     Ok(messages)
 }
 
