@@ -1,10 +1,12 @@
 """
 test_dispatch.py - Tests unitarios del hub_dispatch.py (sin hermes ni SSH).
-Valida: parse frontmatter, capture session_id, logica de target, lock local.
+Valida: parse frontmatter, logica de target, lock local, extract_body, baseline.
 
-ACTUALIZADO [1.3.0] a la API local-first de hub_dispatch.py (reescritura [1.2.0]):
-  - try_lock(brief_id, agent) recibe 2 args; usa globals HUB (Path) y TARGET.
-  - seen_exists / mark_seen son metodos de StateStore (no funciones de modulo).
+ACTUALIZADO (v2): adaptado a hub_dispatch.py reescrito:
+  - capture_session_id eliminado (ya no se usa seed/resume de dos pasos).
+  - extract_body() testeado (nueva funcion que extrae cuerpo del brief).
+  - mark_baseline() testeado.
+  - try_lock y seen siguen igual.
 """
 
 import os
@@ -26,18 +28,21 @@ def test_parse_frontmatter():
     assert hd.parse_frontmatter("hola mundo") == {}
 
 
-def test_capture_session_id():
-    assert hd.capture_session_id("... session_id: 20260808_050000_ab12cd\n") == "20260808_050000_ab12cd"
-    assert hd.capture_session_id("Session: 20260101_000000_ff\n") == "20260101_000000_ff"
-    assert hd.capture_session_id("sin id") == ""
-
-
 def test_target_matches():
     assert hd.target_matches("norte", "norte")
     assert hd.target_matches("any", "norte")
     assert hd.target_matches("both", "norte")
     assert not hd.target_matches("sur", "norte")
     assert hd.target_matches(None, "norte")  # default any
+
+
+def test_extract_body():
+    text = "---\ndate: x\nauthor: arijd\ntarget: sur\n---\nEste es el cuerpo del brief."
+    assert hd.extract_body(text) == "Este es el cuerpo del brief."
+    # sin frontmatter
+    assert hd.extract_body("hola mundo") == "hola mundo"
+    # frontmatter vacio
+    assert hd.extract_body("---\n---\ncuerpo") == "cuerpo"
 
 
 def test_lock_local_atomic():
@@ -63,6 +68,28 @@ def test_seen_local():
     assert not store.seen_exists("brief_x", "norte")
     store.mark_seen("brief_x", "norte")
     assert store.seen_exists("brief_x", "norte")
+
+
+def test_mark_baseline():
+    d = Path(tempfile.mkdtemp())
+    store = StateStore(d)
+    # crear algunos briefs
+    store.write_brief("brief_1", "cuerpo 1", target="sur", author="arijd")
+    store.write_brief("brief_2", "cuerpo 2", target="any", author="arijd")
+    # verificar que no estan marcados
+    assert not store.seen_exists("brief_1.md", "sur")
+    assert not store.seen_exists("brief_2.md", "sur")
+    # ejecutar baseline
+    hd.AGENT = "sur"
+    hd.HUB = d
+    hd.mark_baseline(store, "sur")
+    # ahora deben estar marcados
+    assert store.seen_exists("brief_1.md", "sur")
+    assert store.seen_exists("brief_2.md", "sur")
+    # el baseline marker debe existir
+    assert (store.seen / "_baseline_sur").exists()
+    # segundo llamado no vuelve a marcar (idempotente)
+    hd.mark_baseline(store, "sur")  # no explota
 
 
 if __name__ == "__main__":

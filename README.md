@@ -1,62 +1,108 @@
-# Atlas HUB — Modus Operandi y Resumen de Implementación (Sur)
+# Atlas HUB — Bus de Coordinación Multi-Agente
 
-> Documento vivo del Hub multi-agente (Norte/PC-Mac, Sur/PC-Windows, arijd/humano).
-> Norte (auditor) y Sur (implementador) trabajan aquí; arijd decide. El Desktop
-> ya NO se usa para pasar notas: este repo es la fuente de verdad.
-> Sustituye los `PARA-NORTE-*.md` / `PARA-SUR-*.md` del Desktop.
+> Hub multi-agente (Norte/Mac, Sur/Windows, arijd/humano).
+> Estado compartido en archivos. Transporte = git. Reacción automática a briefs.
 
-## Participantes (identidades distintas e independientes, se respetan)
-- **Sur** — Hermes, PC Windows the_chorus. Implementador del núcleo del Hub.
-- **Norte** — Hermes, Mac vía SSH. Auditor de la implementación de Sur.
-- **arijd** (El Arquitecto) — humano, Popperian/falsificacionista, solo gratis.
+## Participantes
+- **Sur** — Hermes Agent v0.20.0, PC Windows. Dispatcher local.
+- **Norte** — Hermes, Mac (desactivado temporalmente, [1.4.0]). Dispatcher local.
+- **arijd** (El Arquitecto) — humano, decide. Human-in-the-loop.
 
-## Modus operandi (acordado)
+## Cómo funciona (v2.0.0)
+
+```
+arijd escribe brief en briefs/
+        ↓
+FileSystemWatcher detecta .md nuevo (hub_watcher_real.ps1)
+        ↓
+hub_dispatch.py --agent sur --once
+        ↓
+hermes chat -q "<brief>" -Q -m tencent/hy3:free
+        ↓
+dispatcher captura stdout de Hermes
+        ↓
+StateStore.write_consensus() → consensos/consens_sur_YYYYMMDD_HHMMSS.md
+        ↓
+StateStore.mark_seen() → .seen/brief_xxx.md__sur
+```
+
+**El dispatcher escribe el consenso él mismo** (no delega al LLM). Esto hace el
+flujo determinista: si Hermes responde, el consenso se escribe.
+
+## Estructura del repo
+
+```
+hub-atlas/
+├── briefs/              # arijd (o agente) escribe pedidos aquí
+├── consensos/           # agentes escriben respuestas aquí
+├── .seen/               # markers de briefs procesados (append-only)
+├── .processing/         # locks atómicos (TTL 600s)
+├── hub_core.py          # StateStore, CircuitBreaker, PanicButton, ModeRouter
+├── hub_dispatch.py      # Dispatcher local (invoca Hermes, escribe consenso)
+├── orchestrator.py      # Loop TDD A→B→A (framework, no usado en dispatch)
+├── transport_mailbox.py # MailboxGit + A2AClient fallback (git-backed)
+├── hub_watcher_real.ps1 # FileSystemWatcher (reacción instantánea)
+├── hub_watcher_task.xml # Task Scheduler XML (logon trigger)
+├── normalize_seen.ps1   # Limpieza de .seen markers (one-shot)
+├── config.json          # Participantes (arijd, norte, sur)
+├── tests/               # 49 tests (pytest)
+└── CHANGELOG.md         # Historial completo [0.1.0] → [2.0.0]
+```
+
+## Modus operandi
 1. **Transporte separado de estado** (regla de arijd).
-   - Estado = archivos en `HUB/`: `briefs/`, `consensos/`, `.seen/`, `mail/`. Fuente de verdad.
-   - Transporte = `transport_mailbox.py` (MailboxGit: mensajes como `.json`, `git add+commit`).
-2. **TDD**: Norte escribe tests (mocks en `conftest.py`), Sur entrega código real que los pasa.
-   - Tests reales contra implementación: `tests/test_core_real.py`.
-   - `pytest tests/ -v` → 35 passed (verificado PC y Mac).
-3. **Commits conversacionales con scope**, separados por feature (trazabilidad):
-   - `feat(hub): ...`, `refactor(tests): ...`, `docs(hub): ...`, `chore(hub): ...`
-   - Cada agente commitea con su firma (`user.name` Sur/Norte) para verse como identidades distintas.
-4. **Consensos**: `HUB/consensos/consens_<agente>_*.md` con `author:` en frontmatter.
-5. **Auditoría**: Norte audita la implementación de Sur como issue/PR o nota en repo.
-   - Auditoría 2026-08-08: **APROBADO** (ver `consensos/` o historial). Norte alineó sus
-     mock-tests al fallback silencioso de `A2AClient`.
-6. **Push**: solo tras OK explícito de arijd. Remote: `git@github.com:nedder3/hub-atlas.git`.
+   - Estado = archivos: `briefs/`, `consensos/`, `.seen/`. Fuente de verdad.
+   - Transporte = git push/pull entre máquinas.
+2. **TDD**: Norte escribe tests, Sur implementa. `pytest tests/ -v` → 49 passed.
+3. **Commits conversacionales** con scope: `feat(hub):`, `fix(dispatch):`, etc.
+4. **Consensos**: `consensos/consens_<agente>_*.md` con `author:` en frontmatter.
+5. **Push**: solo tras OK de arijd. Remote: `git@github.com:nedder3/hub-atlas.git`.
 
-## Qué se implementó (Sur, 2026-08-08)
-- `hub_core.py` — contratos REALES:
-  - `StateStore` (RF2): briefs/consensos/.seen en archivos; `write_brief`, `list_pending_briefs`,
-    `write_consensus` (author obligatorio), `seen_exists`/`mark_seen`, `write_spec`/`read_spec` (RF4).
-  - `CircuitBreaker` (RF3): max 3 → `handoff: human`.
-  - `PanicButton` (RF5): press/is_pressed/reset.
-  - `ModeRouter` (RF6/RF7): chat (turno 1-1-1) / brainstorm (split, no exclusión) + @mentions.
-    `options_brainstorm()` = Draw poker (elegir / re-evaluar / descartar).
-- `transport_mailbox.py` — transporte REAL (RF1/RF8):
-  - `MailboxGit`: mensajes `.json` en `HUB/mail/`, `git add+commit`, push opcional. CERO deps.
-  - `A2AClient`: intenta cruzar; como **Hermes NO tiene A2A nativo** en esta versión
-    (`hermes a2a` inexistente; `hermes serve` requiere auth), cae **silencioso** a MailboxGit.
-    Cumple RF1 sin SSH manual y RF8.
-- `tests/test_core_real.py` — 13 tests contra código REAL (RF2–RF8).
-- `tests/requirements_sur.md` — spec formal RF1–RF8 → test (trazabilidad).
-- `tests/conftest.py` — mocks de Norte (contrato teórico); tests reales usan implementación.
+## Componentes (RF cubiertos)
 
-## Decisión de diseño clave (anti-callejón)
-- Norte recomendó "probar A2A nativo en vivo". Sur VERIFICÓ que no existe en esta versión.
-- Salida: **mailbox git-backed** aprovechando que el vault ya es bus de estado compartido
-  (ambos indexan el grafo). Mató el SSH spaghetti (`hub_dispatch.py` usa SSH+`cmd /c`, frágil)
-  SIN meter MQTT/Redis (overkill para 3 nodos a ritmo humano).
-- Blueprint de Gemini (LangGraph+MQTT) = sobre-ingeniería para este caso; se adopta solo la
-  lógica de estados (modos, circuit breaker, aislamiento, panic button).
+| Componente | RF | Estado |
+|---|---|---|
+| `StateStore` (briefs/consensos/.seen) | RF2 | Sólido, 49 tests |
+| `CircuitBreaker` (max 3 → handoff humano) | RF3 | Sólido |
+| `PanicButton` (freno de emergencia) | RF5 | Sólido |
+| `ModeRouter` (chat/brainstorm/@mentions) | RF6/RF7 | Sólido |
+| `MailboxGit` (transporte git-backed) | RF1/RF8 | Sólido |
+| `hub_dispatch.py` (dispatcher local) | — | **Operativo** (v2, E2E verificado) |
+| `hub_watcher_real.ps1` (FileSystemWatcher) | — | **Nuevo** (v2.0.0) |
 
-## Falsifiability
-- "Implementación cumple RF" ⇔ `pytest tests/` = 35 passed (PC y Mac).
-- "A2A nativo no existe" ⇔ `hermes a2a --help` = invalid choice; `hermes serve` requiere auth.
-- "Repo es fuente de verdad" ⇔ este README vive en el repo, no en Desktop.
+## Activar el watcher automático
 
-## Pendiente
-- Sync automático Mac↔PC vía remote comun (push/pull). Autorizado por arijd el 2026-08-08.
-- Definir remote comun para `mail/` si se quiere push automático de mensajes.
-- Estrategia de los 3 (arijd + Norte + Sur) por definir; este repo es el canal.
+```powershell
+# Importar tarea en Task Scheduler (se activa al login)
+schtasks /create /xml hub_watcher_task.xml /tn AtlasHubWatcher
+
+# O correr manualmente
+powershell -ExecutionPolicy Bypass -File hub_watcher_real.ps1
+```
+
+## Probar manualmente
+
+```bash
+# Crear brief de prueba
+python -c "
+from hub_core import StateStore
+s = StateStore('.')
+s.write_brief('test_manual', 'Respondé con una línea.', target='sur', author='arijd')
+"
+
+# Correr dispatcher una vez
+python hub_dispatch.py --agent sur --hub-path . --once --skip-baseline
+
+# Verificar consenso
+dir consensos\consens_sur_*.md
+```
+
+## Decisiones de diseño
+- **A2A nativo NO existe** en Hermes v0.20.0 → mailbox git-backed ([0.8.0]/[0.9.0]).
+- **MQTT/Redis descartado** como overkill para 3 nodos a ritmo humano.
+- **Port Mac Tauri CANCELADO** por arijd ([1.4.0]). Alcance = 100% Windows.
+- **Modelo default**: `tencent/hy3:free` via Nous (gratuito). Override: `HUB_SEED_MODEL`.
+
+## Mac/Norte (cuando se reactive)
+Norte no necesita SSH. Clona el repo, corre su dispatcher local, git push/pull.
+**Git es el bus.**

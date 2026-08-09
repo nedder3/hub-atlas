@@ -104,10 +104,69 @@ Norte deja `tests/test_orchestrator_*.py` (unit/integration/docs). Contratos: `r
 - **Nota (Norte, sin push)**: Norte NO pushea. Esta decisión escrita en la PC de Sur
   vía SSH; Sur pushea cuando retome.
 
+## [2.0.0] 2026-08-09 — AUDITORÍA EXTERNA + REESCRITURA DISPATCHER (Antigravity)
+
+Auditoría completa del HUB por Antigravity (a pedido de arijd). Se diagnosticaron
+3 bugs fatales que impedían el funcionamiento end-to-end y se resolvieron todos.
+
+### Diagnóstico (3 bugs fatales)
+
+1. **Consenso no se escribía**: `hub_dispatch.py` delegaba la escritura al LLM dentro
+   de Hermes (pidiéndole que usara `write_file`). Con `auto/fast` (modelo de triage
+   sin tool-calling confiable), el LLM respondía en texto pero nunca invocaba la tool.
+   Además, los flags de argparse estaban en orden incorrecto (`-q -Q msg` → `-Q` se
+   consumía como query de `-q`).
+2. **Reprocesaba historial**: Al arrancar iteraba los 28 briefs sin filtrar por
+   "nuevos desde el arranque". Los `.seen` markers tenían formato inconsistente
+   (duplicados con y sin extensión `.md`).
+3. **Dos copias del proyecto**: `Atlas/HUB/` (versión vieja con SSH-spaghetti, 333
+   líneas) y `Atlas/10-Projects/hub-atlas/` (versión limpia local-first). El watcher
+   apuntaba al directorio obsoleto.
+
+### Cambios
+
+- **refactor(dispatch)**: `hub_dispatch.py` reescrito v2. Cambio de filosofía: el
+  dispatcher captura stdout de Hermes y escribe el consenso ÉL MISMO vía
+  `StateStore.write_consensus()`. Elimina delegación ciega al LLM. Una sola
+  invocación en vez de seed/resume. Verificación post-escritura antes de `.seen`.
+- **feat(dispatch)**: `mark_baseline()` marca todos los briefs existentes como
+  `.seen` al primer arranque → solo procesa briefs NUEVOS.
+- **fix(dispatch)**: Modelo default `tencent/hy3:free` (Nous, gratuito, siempre
+  disponible) en vez de `auto/fast` (triage sin tool-calling). Override: `HUB_SEED_MODEL`.
+- **fix(dispatch)**: Emojis reemplazados por ASCII (`[OK]`, `[WARN]`, `[ERROR]`)
+  para compatibilidad con charmap de Windows.
+- **feat(watcher)**: `hub_watcher_real.ps1` con `System.IO.FileSystemWatcher` de
+  .NET. Reacciona instantáneamente a `.md` nuevos en `briefs/` (debounce 2s).
+  Reemplaza polling de 30s.
+- **feat(watcher)**: `hub_watcher_task.xml` para Task Scheduler de Windows (logon
+  trigger, ejecución como arijd, ExecutionPolicy Bypass).
+- **fix(seen)**: `normalize_seen.ps1` limpió 54 markers duplicados (formato viejo
+  sin `.md`) y creó 4 faltantes. Baseline aplicado.
+- **chore(structure)**: `Atlas/HUB/` renombrado a `HUB_OBSOLETO_BORRAR` (contiene
+  versión vieja con `_ssh()`, `scp`, `REMOTE`, modelo hardcoded `hermes3:8b`).
+- **test(dispatch)**: `test_dispatch.py` actualizado: -1 test obsoleto
+  (`capture_session_id`), +2 nuevos (`test_extract_body`, `test_mark_baseline`).
+- **test**: `pytest` → **49 passed / 0 failed** (antes 48).
+
+### Verificación E2E
+
+```
+Brief: brief_20260808_211351_e2e_v2.md (target=sur, author=arijd)
+Modelo: tencent/hy3:free via Nous Research API
+Resultado: consens_sur_20260808_211420.md escrito con éxito
+Contenido: "El hub funciona."
+.seen marker: brief_20260808_211351_e2e_v2.md__sur ✓
+```
+
+### Arquitectura Mac/Norte (para cuando se active)
+
+Norte no necesita SSH. Flujo: Norte clona repo → corre dispatcher local
+(`--agent norte`) → Hermes lee briefs locales → escribe consensos → git push.
+**Git es el bus.**
+
 ## Pendiente
 
-- Sur: pushear fix tests dispatch (`[1.3.0]`) y decisión `[1.4.0]`. Opcional: ejercitar
-  `hub_dispatch.py --agent sur` real en Windows para validar el despertar hermes
-  end-to-end.
-- Norte: SIN trabajo de port Mac (cancelado por `[1.4.0]` hasta nuevo aviso de arijd).
-- CHANGELOG se actualiza por cada cambio de versión/estructura (no solo README).
+- Activar watcher: `schtasks /create /xml hub_watcher_task.xml /tn AtlasHubWatcher`.
+- Eliminar `Atlas/HUB_OBSOLETO_BORRAR/` cuando arijd confirme.
+- Norte: activar dispatcher en Mac cuando se reactive (sin SSH, local-first).
+- CHANGELOG se actualiza por cada cambio de versión/estructura.
