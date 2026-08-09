@@ -92,6 +92,29 @@ def test_mark_baseline():
     hd.mark_baseline(store, "sur")  # no explota
 
 
+def test_dispatch_respects_panic():
+    d = Path(tempfile.mkdtemp())
+    hd.HUB = d
+    hd.STORE = StateStore(d)
+    hd.AGENT = "sur"
+    hd.DRY_RUN = False
+    
+    # Create brief
+    hd.STORE.write_brief("brief_panic_test", "cuerpo", target="sur", author="arijd")
+    assert not hd.STORE.seen_exists("brief_panic_test.md", "sur")
+    
+    # Enable panic file
+    (d / ".panic").touch()
+    
+    # Try processing - should skip and not lock/seen/consensus
+    hd.process_brief("brief_panic_test.md")
+    
+    assert not hd.STORE.seen_exists("brief_panic_test.md", "sur")
+    assert list((d / "consensos").glob("consens_sur_*")) == []
+    # Clean up panic file
+    (d / ".panic").unlink()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

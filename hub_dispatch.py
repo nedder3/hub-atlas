@@ -224,6 +224,9 @@ def mark_baseline(store, agent):
 # ---------- proceso ----------
 def process_brief(brief_file):
     global TARGET
+    if (HUB / ".panic").exists():
+        log(f"[PANIC] Freno de emergencia activo. Saltando brief {brief_file}")
+        return
     text = (HUB / "briefs" / brief_file).read_text(encoding="utf-8")
     meta = parse_frontmatter(text)
     TARGET = meta.get("target", "any")

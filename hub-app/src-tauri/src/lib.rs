@@ -5,7 +5,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-const CONFIG_PATH: &str = "C:\\Users\\arijd\\Documents\\Atlas\\HUB\\config.json";
+const CONFIG_PATH: &str = "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas\\config.json";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Participant {
@@ -37,14 +37,14 @@ pub struct Message {
 
 fn read_hub_path_from_config() -> Result<String, String> {
     if !Path::new(CONFIG_PATH).exists() {
-        return Ok("C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string());
+        return Ok("C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string());
     }
     let content = fs::read_to_string(CONFIG_PATH).map_err(|e| e.to_string())?;
     let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     if let Some(path) = json.get("hub_path").and_then(|v| v.as_str()) {
         Ok(path.to_string())
     } else {
-        Ok("C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string())
+        Ok("C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string())
     }
 }
 
@@ -58,12 +58,12 @@ fn set_hub_path(path: String) -> Result<(), String> {
     let mut config = if Path::new(CONFIG_PATH).exists() {
         let content = fs::read_to_string(CONFIG_PATH).map_err(|e| e.to_string())?;
         serde_json::from_str::<HubConfig>(&content).unwrap_or_else(|_| HubConfig {
-            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string(),
+            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string(),
             participants: vec![],
         })
     } else {
         HubConfig {
-            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string(),
+            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string(),
             participants: vec![],
         }
     };
@@ -84,7 +84,7 @@ fn read_config() -> Result<HubConfig, String> {
     if !Path::new(CONFIG_PATH).exists() {
         // Return default configuration
         return Ok(HubConfig {
-            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string(),
+            hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string(),
             participants: vec![
                 Participant {
                     id: "arijd".to_string(),
@@ -244,7 +244,7 @@ fn send_message(
 
     // Read config to find sender's role
     let config = read_config().unwrap_or_else(|_| HubConfig {
-        hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\HUB".to_string(),
+        hub_path: "C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas".to_string(),
         participants: vec![],
     });
 
@@ -382,6 +382,103 @@ fn invoke_engine(
     Ok(response)
 }
 
+#[tauri::command]
+fn run_dispatcher(agent: String) -> Result<String, String> {
+    let hub_path_str = read_hub_path_from_config()?;
+    let hub_dir = PathBuf::from(&hub_path_str);
+    let script_path = hub_dir.join("hub_dispatch.py");
+
+    if !script_path.exists() {
+        return Err(format!("No se encontró hub_dispatch.py en {}", script_path.display()));
+    }
+
+    // Run command: python hub_dispatch.py --agent <agent> --hub-path <hub_path> --once
+    let output = std::process::Command::new("python")
+        .arg(script_path)
+        .arg("--agent")
+        .arg(&agent)
+        .arg("--hub-path")
+        .arg(&hub_path_str)
+        .arg("--once")
+        .current_dir(&hub_dir)
+        .output()
+        .map_err(|e| format!("Error ejecutando python: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(format!("Ejecución exitosa:\n{}\n{}", stdout, stderr))
+    } else {
+        Err(format!("Error en dispatcher (código {}):\n{}\n{}", 
+            output.status.code().unwrap_or(-1), stdout, stderr))
+    }
+}
+
+#[tauri::command]
+fn read_dispatch_log() -> Result<String, String> {
+    let hub_path_str = read_hub_path_from_config()?;
+    let hub_dir = PathBuf::from(hub_path_str);
+    let log_path = hub_dir.join(".dispatch_sur.log");
+
+    if !log_path.exists() {
+        return Ok("El archivo de log no existe aún.".to_string());
+    }
+
+    let content = fs::read_to_string(&log_path).map_err(|e| e.to_string())?;
+    
+    // Return last 10000 characters
+    if content.len() > 10000 {
+        Ok(format!("...[truncado]...\n{}", &content[content.len() - 10000..]))
+    } else {
+        Ok(content)
+    }
+}
+
+#[tauri::command]
+fn get_active_locks() -> Result<Vec<String>, String> {
+    let hub_path_str = read_hub_path_from_config()?;
+    let hub_dir = PathBuf::from(hub_path_str);
+    let proc_dir = hub_dir.join(".processing");
+    
+    let mut locks = Vec::new();
+    if !proc_dir.exists() {
+        return Ok(locks);
+    }
+
+    let entries = fs::read_dir(proc_dir).map_err(|e| e.to_string())?;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() && path.extension().map_or(false, |ext| ext == "lock") {
+            if let Some(name) = path.file_name() {
+                locks.push(name.to_string_lossy().to_string());
+            }
+        }
+    }
+    Ok(locks)
+}
+
+#[tauri::command]
+fn toggle_panic(panic: bool) -> Result<(), String> {
+    let hub_path_str = read_hub_path_from_config()?;
+    let hub_dir = PathBuf::from(hub_path_str);
+    let panic_file = hub_dir.join(".panic");
+
+    if panic {
+        fs::write(&panic_file, "").map_err(|e| e.to_string())?;
+    } else if panic_file.exists() {
+        fs::remove_file(&panic_file).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn is_panic_active() -> Result<bool, String> {
+    let hub_path_str = read_hub_path_from_config()?;
+    let hub_dir = PathBuf::from(hub_path_str);
+    Ok(hub_dir.join(".panic").exists())
+}
+
 fn spawn_watcher(app_handle: AppHandle) {
     std::thread::spawn(move || {
         let mut last_state = HashMap::new();
@@ -391,7 +488,7 @@ fn spawn_watcher(app_handle: AppHandle) {
 
             let hub_dir = match read_hub_path_from_config() {
                 Ok(path) => PathBuf::from(path),
-                Err(_) => PathBuf::from("C:\\Users\\arijd\\Documents\\Atlas\\HUB"),
+                Err(_) => PathBuf::from("C:\\Users\\arijd\\Documents\\Atlas\\10-Projects\\hub-atlas"),
             };
 
             let mut current_state = HashMap::new();
@@ -460,7 +557,12 @@ pub fn run() {
             send_message,
             receive_message,
             set_status,
-            invoke_engine
+            invoke_engine,
+            run_dispatcher,
+            read_dispatch_log,
+            get_active_locks,
+            toggle_panic,
+            is_panic_active
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

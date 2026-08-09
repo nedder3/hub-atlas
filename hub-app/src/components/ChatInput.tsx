@@ -9,6 +9,9 @@ interface ChatInputProps {
   participants: Participant[];
   replyToMessageId: string | null;
   onClearReply: () => void;
+  isPanic: boolean;
+  isRunningDispatcher: boolean;
+  onRunDispatcher: (agent: string) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -19,6 +22,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   participants,
   replyToMessageId,
   onClearReply,
+  isPanic,
+  isRunningDispatcher,
+  onRunDispatcher,
 }) => {
   const [content, setContent] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -129,11 +135,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            activeParticipant
+            isPanic
+              ? "PROTOCOLO DE PÁNICO ACTIVO - Mensajes bloqueados"
+              : activeParticipant
               ? `Escribir mensaje como ${activeParticipant.name}...`
               : "Selecciona un participante..."
           }
-          disabled={!activeParticipant}
+          disabled={!activeParticipant || isPanic}
           rows={1}
         />
         <div className="input-actions-group">
@@ -141,11 +149,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             className="send-button"
             onClick={handleSend}
-            disabled={!content.trim() || !activeParticipant}
+            disabled={!content.trim() || !activeParticipant || isPanic}
             title={`Enviar como ${activeParticipant?.name}`}
             style={{
-              backgroundColor: activeParticipant?.color || "#845ec2",
-              boxShadow: content.trim() && activeParticipant
+              backgroundColor: isPanic ? "#6b7280" : (activeParticipant?.color || "#845ec2"),
+              boxShadow: content.trim() && activeParticipant && !isPanic
                 ? `0 0 16px ${activeParticipant.color}a0`
                 : "none",
             }}
@@ -163,7 +171,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             className="engine-invoke-btn"
             onClick={handleInvokeEngine}
-            disabled={!content.trim()}
+            disabled={!content.trim() || isPanic}
             title="Invocar motor de inteligencia Antigravity"
           >
             <svg className="pulse-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -189,12 +197,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             className="agent-simulate-btn"
             onClick={handleSimulateAgent}
-            disabled={!content.trim() || !selectedAgentId}
+            disabled={!content.trim() || !selectedAgentId || isPanic}
             title="Simula la respuesta del agente seleccionado escribiendo en consensos/"
           >
             Simular Agente
           </button>
         </div>
+      </div>
+
+      {/* Real Dispatcher Trigger Panel */}
+      <div className="dispatcher-actions">
+        <button
+          className="run-dispatcher-btn"
+          onClick={() => onRunDispatcher("sur")}
+          disabled={isPanic || isRunningDispatcher}
+          title="Ejecutar dispatcher real para el agente Sur (procesa briefs pendientes)"
+        >
+          {isRunningDispatcher ? "Ejecutando..." : "Ejecutar Dispatcher Real (Sur)"}
+        </button>
+        <button
+          className="run-dispatcher-btn"
+          onClick={() => onRunDispatcher("norte")}
+          disabled={isPanic || isRunningDispatcher}
+          title="Ejecutar dispatcher real para el agente Norte (procesa briefs pendientes)"
+        >
+          {isRunningDispatcher ? "Ejecutando..." : "Ejecutar Dispatcher Real (Norte)"}
+        </button>
       </div>
     </div>
   );

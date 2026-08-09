@@ -126,19 +126,33 @@ class CircuitBreaker:
 # =====================================================================
 
 class PanicButton:
-    """Freno de emergencia. Cuando se presiona, detiene el loop iterativo."""
+    """Freno de emergencia. Cuando se presiona, detiene el loop iterativo.
+    También puede ser persistido mediante un archivo .panic en la raíz del HUB.
+    """
 
-    def __init__(self):
+    def __init__(self, hub_path: Optional[str | Path] = None):
         self._pressed = False
+        self.hub_path = Path(hub_path).resolve() if hub_path else None
 
     def press(self) -> None:
         self._pressed = True
+        if self.hub_path:
+            (self.hub_path / ".panic").touch()
 
     def is_pressed(self) -> bool:
-        return self._pressed
+        if self._pressed:
+            return True
+        if self.hub_path and (self.hub_path / ".panic").exists():
+            return True
+        return False
 
     def reset(self) -> None:
         self._pressed = False
+        if self.hub_path and (self.hub_path / ".panic").exists():
+            try:
+                (self.hub_path / ".panic").unlink()
+            except OSError:
+                pass
 
 
 # =====================================================================

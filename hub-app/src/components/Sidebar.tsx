@@ -7,6 +7,9 @@ interface SidebarProps {
   onSelectUser: (userId: string) => void;
   onToggleStatus: (userId: string, currentStatus: boolean) => void;
   hubPath: string;
+  isPanic: boolean;
+  onTogglePanic: () => void;
+  activeLocks: string[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -15,6 +18,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectUser,
   onToggleStatus,
   hubPath,
+  isPanic,
+  onTogglePanic,
+  activeLocks,
 }) => {
   return (
     <aside className="sidebar">
@@ -30,11 +36,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      <div className="panic-control-panel">
+        <button 
+          className={`panic-btn ${isPanic ? 'active' : ''}`}
+          onClick={onTogglePanic}
+          title={isPanic ? "Desactivar Protocolo de Pánico" : "Activar Protocolo de Pánico"}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          {isPanic ? "PÁNICO ACTIVADO" : "BOTÓN DE PÁNICO"}
+        </button>
+      </div>
+
       <div className="sidebar-section">
         <h2 className="section-title">Participantes</h2>
         <div className="participants-list">
           {participants.map((p) => {
             const isActive = p.id === currentUser;
+            // Check if there is an active lock for this agent
+            const hasLock = activeLocks.some(lock => lock.toLowerCase().includes(p.id.toLowerCase()));
+            
             return (
               <div
                 key={p.id}
@@ -54,6 +76,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="p-details">
                   <div className="p-name">{p.name}</div>
                   <div className="p-role">{p.role}</div>
+                  {hasLock && (
+                    <div className="lock-badge">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                      </svg>
+                      <span>Procesando...</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-actions">

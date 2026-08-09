@@ -104,6 +104,17 @@ Norte deja `tests/test_orchestrator_*.py` (unit/integration/docs). Contratos: `r
 - **Nota (Norte, sin push)**: Norte NO pushea. Esta decisión escrita en la PC de Sur
   vía SSH; Sur pushea cuando retome.
 
+## [2.1.0] 2026-08-09 — FRONTEND TAURI ADAPTADO A WINDOWS 11 (Antigravity)
+
+Refactorización y diseño de la interfaz de usuario en Tauri para adaptarla al flujo local del HUB.
+
+- **feat(tauri)**: Interfaz en React conectada a comandos de Rust.
+- **feat(tauri)**: Comando `run_dispatcher` para ejecución asíncrona a demanda de los agentes.
+- **feat(tauri)**: Comando `read_dispatch_log` y visor de logs integrado en tiempo real.
+- **feat(tauri)**: Polling de locks activos en `.processing/` y visualización de estados.
+- **feat(hub)**: Integración del Panic Button file-backed (`.panic` en el hub) en Rust y Python.
+- **test(TDD)**: Nuevas pruebas en `test_core_real.py` y `test_dispatch.py` para Panic Button.
+
 ## [2.0.0] 2026-08-09 — AUDITORÍA EXTERNA + REESCRITURA DISPATCHER (Antigravity)
 
 Auditoría completa del HUB por Antigravity (a pedido de arijd). Se diagnosticaron

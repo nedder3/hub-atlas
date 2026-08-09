@@ -81,6 +81,26 @@ def test_panic_button_real():
     assert step() == "detenido"
 
 
+def test_panic_button_file_backed(tmp_path):
+    pb = PanicButton(tmp_path)
+    assert not pb.is_pressed()
+    
+    # Create the panic file manually to simulate Tauri interface action
+    (tmp_path / ".panic").touch()
+    assert pb.is_pressed()
+    
+    # Reset should remove it
+    pb.reset()
+    assert not pb.is_pressed()
+    assert not (tmp_path / ".panic").exists()
+    
+    # Press should create it
+    pb.press()
+    assert pb.is_pressed()
+    assert (tmp_path / ".panic").exists()
+
+
+
 # ---- RF6 + RF7: modos y @mentions ----
 def test_modo_chat_turno(tmp_path):
     mr = ModeRouter(self_agent="sur")
